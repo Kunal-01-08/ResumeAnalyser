@@ -120,7 +120,7 @@ if(result.status==401) {
         <div className="h-3/4 border-b-0 border-white border-2 border-dotted  text-white p-3 flex  flex-row md:flex-col  justify-between gap-2 overflow-auto w-full">
         <div className="w-full px-4">
           <form onSubmit={handleSubmit} className="flex flex-col gap-2 w-full">
-            <intryput
+            <input
               id="resume"
               name="file"
               type="file"
