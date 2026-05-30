@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+
+
+*::-webkit-scrollbar {
+  width: 6px;
+  transition: all 0.2s ease;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #2c2d2f;
+  border-radius: 999px;
+}
+
+@keyframes up {
+
+  from {
+    
+    transform: translateY(650px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(-100%);
+  }
+}
