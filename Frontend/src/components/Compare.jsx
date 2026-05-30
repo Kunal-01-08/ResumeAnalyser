@@ -14,7 +14,8 @@ const Compare = () => {
   }
   const handleSubmit = async (e) => {
     e.preventDefault();
-    await spinnerText("Comparing the resumes and preparing the result for you...")
+    try{
+      await spinnerText("Comparing the resumes and preparing the result for you...")
 const token = localStorage.getItem("token");
     let formData = new FormData(e.target);
 
@@ -44,6 +45,13 @@ if(res.status==401) {
       setresponse(resJson);
       seterror("");
     }
+    }catch (err) {
+    console.error(err);
+
+    seterror(
+      "Unable to connect to the server. Please try again in a few moments."
+    );
+  }
   };
 
   return (

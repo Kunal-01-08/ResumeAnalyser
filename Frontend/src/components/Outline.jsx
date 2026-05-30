@@ -12,7 +12,8 @@ const Outline = () => {
   }
   const handleSubmit = async (e) => {
     e.preventDefault();
-    await spinnerText("Generating the resume outline for you, it will take a moment...")
+   try{
+     await spinnerText("Generating the resume outline for you, it will take a moment...")
 const token = localStorage.getItem("token");
     let formData = new FormData(e.target);
 
@@ -43,6 +44,13 @@ const token = localStorage.getItem("token");
       seterror("No error occurred...");
       console.log(resJson);
     }
+   }catch (err) {
+    console.error(err);
+
+    seterror(
+      "Unable to connect to the server. Please try again in a few moments."
+    );
+  }
   };
   return (
     <div className="flex flex-col lg:flex-row w-screen h-screen text-white text-xs ">

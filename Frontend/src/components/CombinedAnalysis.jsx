@@ -17,7 +17,8 @@ const CombinedAnalysis = () => {
   }
   const handleSubmit = async (e) => {
     e.preventDefault();
-    await spinnerText("Analysing the github profile against the claims in your resume, it will take a moment...")
+    try{
+      await spinnerText("Analysing the github profile against the claims in your resume, it will take a moment...")
 const token = localStorage.getItem("token");
     let formData = new FormData(e.target);
 
@@ -45,11 +46,18 @@ if(res.status==401) {
       setprofile(resJson.profile);
       seterror("No error occurrred...");
     }
+    }catch (err) {
+    console.error(err);
+
+    seterror(
+      "Unable to connect to the server. Please try again in a few moments."
+    );
+  }
   };
 
   const handleSubmit2 = async (e) => {
     e.preventDefault();
-    await spinnerText("Working on your query...")
+    try{await spinnerText("Working on your query...")
     const token = localStorage.getItem("token");
     if (query === "")
       seterror("Can not proceed...\n\n Query field can not be empty");
@@ -75,7 +83,13 @@ if(res.status==401) {
         e.target.reset();
         console.log(resJson);
       }
-    }
+    }}catch (err) {
+    console.error(err);
+
+    seterror(
+      "Unable to connect to the server. Please try again in a few moments."
+    );
+  }
   };
 
   return (

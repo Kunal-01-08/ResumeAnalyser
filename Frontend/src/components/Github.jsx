@@ -13,7 +13,8 @@ const Github = () => {
   }
   const handleSubmit = async (e) => {
     e.preventDefault();
-    await spinnerText("Analysing your github profile, please wait...")
+    try{
+      await spinnerText("Analysing your github profile, please wait...")
 const token = localStorage.getItem("token");
     let formData = new FormData(e.target);
 
@@ -38,6 +39,13 @@ const token = localStorage.getItem("token");
       seterror("No error occurrred...");
       console.log(resJson);
     }
+    }catch (err) {
+    console.error(err);
+
+    seterror(
+      "Unable to connect to the server. Please try again in a few moments."
+    );
+  }
   };
   return (
     <div className="flex w-screen flex-col lg:flex-row h-screen text-white gap-2">

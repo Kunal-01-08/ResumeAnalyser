@@ -19,39 +19,52 @@ const Service = () => {
       seterror(text)
   }
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    await spinnerText("Our AI is analysing your resume...")
-    const token = localStorage.getItem("token");
-    let formData = new FormData(e.target);
+  e.preventDefault();
 
-    let res = await fetch(`${backend}/resume/analyse`, {
-      method: "POST",headers:{
-      Authorization:`Bearer ${token}`
-   },
+  try {
+    await spinnerText("Our AI is analysing your resume...");
+
+    const token = localStorage.getItem("token");
+    const formData = new FormData(e.target);
+
+    const res = await fetch(`${backend}/resume/analyse`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
       body: formData,
     });
-    if(res.status==401) {
-      localStorage.removeItem("token")
-      navigate("/authentication")
-      return
+
+    if (res.status === 401) {
+      localStorage.removeItem("token");
+      navigate("/authentication");
+      return;
     }
 
-    let resJson = await res.json();
-    if (!res.ok) seterror(resJson.detail);
-    else {
-      setstrengths(resJson.Response.Strengths);
-      setweaknesses(resJson.Response.Weaknesses);
-      setresume(resJson.Resume);
-      setats(resJson.Response.Atsscore)
-      seterror("No error encountered while responding to your request")
-      
+    const resJson = await res.json();
+
+    if (!res.ok) {
+      seterror(resJson.detail || "An unexpected error occurred.");
+      return;
     }
-    
-  };
+
+    setstrengths(resJson.Response.Strengths);
+    setweaknesses(resJson.Response.Weaknesses);
+    setresume(resJson.Resume);
+    setats(resJson.Response.Atsscore);
+    seterror("No error encountered while responding to your request");
+  } catch (err) {
+    console.error(err);
+
+    seterror(
+      "Unable to connect to the server. Please try again in a few moments."
+    );
+  }
+};
 
   const handleSubmit2 = async (e) => {
-    
     e.preventDefault();
+    try{
     await spinnerText("Working on your query...")
     const token = localStorage.getItem("token");
     if (resume === "")
@@ -81,6 +94,14 @@ if(result.status==401) {
           console.log(resJson);
         }
     }
+    }catch (err) {
+    console.error(err);
+
+    seterror(
+      "Unable to connect to the server. Please try again in a few moments."
+    );
+  }
+  
   };
 
   return (
@@ -99,7 +120,7 @@ if(result.status==401) {
         <div className="h-3/4 border-b-0 border-white border-2 border-dotted  text-white p-3 flex  flex-row md:flex-col  justify-between gap-2 overflow-auto w-full">
         <div className="w-full px-4">
           <form onSubmit={handleSubmit} className="flex flex-col gap-2 w-full">
-            <input
+            <intryput
               id="resume"
               name="file"
               type="file"
