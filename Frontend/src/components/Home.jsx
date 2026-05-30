@@ -146,7 +146,7 @@ const Home = () => {
           </a>
         </div>
 
-        <div className="w-full lg:w-1/4 2xl:w-1/2 overflow-hidden h-150 bg-blue-950 rounded-2xl">
+        <div className="w-full lg:w-1/4 2xl:w-1/2 overflow-hidden h-120 bg-blue-950 rounded-2xl">
           <div className="about text-yellow-600 w-full  h-fit p-4 rounded-4xl flex flex-col animate-[up_40s_linear_infinite] hover:[animation-play-state:paused]">
             <div className="flex flex-col gap-10 text-white">
               <section className="flex flex-col gap-4">
