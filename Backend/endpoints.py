@@ -38,10 +38,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-embeddings = HuggingFaceEmbeddings(
+embeddings=None
+def getembeddings():
+    global embeddings
+    embeddings = HuggingFaceEmbeddings(
     model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
+    )
 
 async def extract_resume(file: UploadFile):
     content = await file.read()
@@ -325,6 +327,7 @@ async def githubAnalysis(githubUrl:str=Form(...), user= Depends(get_current_user
 @app.post("/combined/analysis", response_model=CombinedResponseSchema)
 async def combinedAnalysis(file:UploadFile=File(...), githubUrl:str=Form(...), user= Depends(get_current_user)):
         try:
+            global embeddings
              
             if file.content_type != "application/pdf":
                 raise HTTPException(
@@ -430,6 +433,8 @@ README:
             except:
                 pass
 
+            if(not embeddings):
+                getembeddings()
 
             vectorstore = Chroma(
     collection_name=f"user_{user.id}",
