@@ -67,6 +67,8 @@ def get_current_user(
     )
 
     try:
+        if token in ["null", "undefined", "", None]:
+            raise credentials_exception
 
         payload = jwt.decode(
             token,
@@ -79,7 +81,7 @@ def get_current_user(
         if email is None:
             raise credentials_exception
 
-    except Exception:
+    except :
         raise credentials_exception
 
     user = db.query(User).filter(
