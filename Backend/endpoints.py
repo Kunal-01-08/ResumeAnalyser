@@ -24,8 +24,15 @@ load_dotenv()
 
 Base.metadata.create_all(bind=engine)
 
-frontend_urls = os.getenv("FRONTEND_URLS", "").split(",")
-
+frontend_urls = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    *[
+        url.strip()
+        for url in os.getenv("FRONTEND_URLS", "").split(",")
+        if url.strip()
+    ]
+]
 
 app=FastAPI()
 
@@ -36,7 +43,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+print("CORS ALLOWED ORIGINS:", frontend_urls)
 print("A. endpoints.py loaded")
 
 embeddings=None
