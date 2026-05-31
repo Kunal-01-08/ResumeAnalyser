@@ -38,13 +38,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+print("A. endpoints.py loaded")
+
 embeddings=None
 def getembeddings():
     global embeddings
-    embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-    )
 
+    if embeddings is None:
+        print("B. loading embeddings")
+
+        embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2"
+        )
+
+        print("C. embeddings loaded")
+
+    return embeddings
 async def extract_resume(file: UploadFile):
     content = await file.read()
 
@@ -419,7 +429,12 @@ README:
 {repos_summary}
 
 """
+            
+            if(embeddings is None):
+                getembeddings()
             documents = resume_doc + github_doc
+
+            print("D: creating chroma")
             try:
 
                 old_store = Chroma(
@@ -433,8 +448,6 @@ README:
             except:
                 pass
 
-            if(not embeddings):
-                getembeddings()
 
             vectorstore = Chroma(
     collection_name=f"user_{user.id}",
