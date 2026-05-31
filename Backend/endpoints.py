@@ -24,14 +24,14 @@ load_dotenv()
 
 Base.metadata.create_all(bind=engine)
 
-frontend_url = os.getenv("FRONTEND_URL")
+frontend_urls = os.getenv("FRONTEND_URLS", "").split(",")
 
 
 app=FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[frontend_url],
+    allow_origins=frontend_urls,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
