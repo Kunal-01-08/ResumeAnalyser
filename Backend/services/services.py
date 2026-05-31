@@ -13,6 +13,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_classic.schema import Document
 
 from langchain_core.output_parsers import PydanticOutputParser
+from dotenv import load_dotenv
+load_dotenv()
 os.environ['GROQ_API_KEY']=os.getenv("GROQ_SECRET")
 
 llm = ChatGroq(model='meta-llama/llama-4-scout-17b-16e-instruct',max_tokens=500,temperature=0.2)

@@ -2,9 +2,11 @@ Frontend/node_modules/
 Frontend/dist/
 
 Backend/MyProjectEnv/
+Backend/DeployEnv/
 Backend/__pycache__/
 Backend/chroma_db/
 Backend/*.db
+Backend/PocForProject.ipynb
 
 .env
 *.env
