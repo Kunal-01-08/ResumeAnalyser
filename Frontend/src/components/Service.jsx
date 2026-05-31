@@ -34,6 +34,7 @@ const Service = () => {
       },
       body: formData,
     });
+    console.log(res)
 
     if (res.status === 401) {
       localStorage.removeItem("token");

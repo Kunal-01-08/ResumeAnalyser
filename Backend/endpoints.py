@@ -36,6 +36,8 @@ frontend_urls = [
 
 app=FastAPI()
 
+frontend_urls = os.getenv("FRONTEND_URLS", "").split(",")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=frontend_urls,

@@ -1,9 +1,22 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
 import { useState } from "react";
+import { useEffect } from "react";
 
 const Home = () => {
-  const [options, setoptions] = useState(1);
+  const [options, setoptions] = useState(0);
+  const [loggedin, setloggedin] = useState(0)
+
+  useEffect(() => {
+   
+    if(localStorage.getItem("token")) setloggedin(1)
+    else setloggedin(0)
+  
+    
+  }, [])
+  
+
+
   return (
     <div
       className="w-screen min-h-screen bg-black text-white p-4 flex flex-col gap-10"
@@ -14,12 +27,13 @@ const Home = () => {
           <span className="text-2xl sm:text-5xl font-extrabold">Resume</span>
           <span className="text-2xl sm:text-5xl font-extrabold text-red-700">Analyser</span>
         </div>
-        <NavLink
+       {loggedin===0 &&  <NavLink
           to="/authentication"
-          className="py-2 px-1 sm:px-3 bg-blue-950 rounded-full flex justify-center items-center transition-all duration-50 hover:scale-101 hover:bg-blue-600 text-xs"
+          className="py-1 px-2 sm:px-3 bg-blue-950 rounded-full flex justify-center items-center transition-all duration-50 hover:scale-101 hover:bg-blue-600 text-xs"
         >
           Signup/ Login
-        </NavLink>
+        </NavLink>}
+        {loggedin===1 && <div className="py-1 px-2 sm:px-3 bg-green-600 rounded-full flex justify-center items-center transition-all duration-50 hover:scale-101  text-xs">Logged in</div> }
       </div>
       <div className="flex flex-col gap-6 lg:flex-row items-center">
         <div className="flex flex-col gap-4 justify-between w-full lg:w-3/4 2xl:w-1/2">
@@ -44,25 +58,25 @@ const Home = () => {
 
   ${
     options == 1
-      ? "opacity-100 h-fit min-w-85 translate-x-0"
+      ? "opacity-100 h-fit min-w-50 translate-x-0"
       : "opacity-100 h-0 w-0 -translate-x-50 pointer-events-none"
   }`}
               >
-                <li className="transition-all duration-100 ease-in-out  hover:bg-black border-gray-700 border hover:text-yellow-500 hover:text-shadow cursor-pointer font-bold text-[15px] hover:font-extrabold hover:text-[16px] h-7  flex justify-center items-center w-full">
+                <li className="transition-all duration-100 ease-in-out  hover:bg-black border-gray-700 border hover:text-yellow-500 hover:text-shadow cursor-pointer font-bold text-[10px] hover:font-extrabold hover:text-[16px] h-7  flex justify-center items-center w-full">
                   <NavLink to="/service">Deep resume analysis</NavLink>
                 </li>
-                <li className="transition-all duration-100 ease-in-out  hover:bg-black border-gray-700 border hover:text-yellow-500 hover:text-shadow cursor-pointer font-bold text-[15px] hover:font-extrabold hover:text-[16px] h-7 flex justify-center items-center w-full">
+                <li className="transition-all duration-100 ease-in-out  hover:bg-black border-gray-700 border hover:text-yellow-500 hover:text-shadow cursor-pointer font-bold text-[10px] hover:font-extrabold hover:text-[16px] h-7 flex justify-center items-center w-full">
                   <NavLink to="/compare">Compare resumes</NavLink>
                 </li>
-                <li className="transition-all duration-100 ease-in-out  hover:bg-black border-gray-700 border hover:text-yellow-500 hover:text-shadow cursor-pointer font-bold text-[15px] hover:font-extrabold hover:text-[16px] h-7 flex justify-center items-center w-full">
+                <li className="transition-all duration-100 ease-in-out  hover:bg-black border-gray-700 border hover:text-yellow-500 hover:text-shadow cursor-pointer font-bold text-[10px] hover:font-extrabold hover:text-[16px] h-7 flex justify-center items-center w-full">
                   <NavLink to="/outline">
                     Role based resume outline suggestions
                   </NavLink>
                 </li>
-                <li className="transition-all duration-100 ease-in-out  hover:bg-black border-gray-700 border hover:text-yellow-500 hover:text-shadow cursor-pointer font-bold text-[15px] hover:font-extrabold hover:text-[16px] h-7 flex justify-center items-center w-full">
+                <li className="transition-all duration-100 ease-in-out  hover:bg-black border-gray-700 border hover:text-yellow-500 hover:text-shadow cursor-pointer font-bold text-[10px] hover:font-extrabold hover:text-[16px] h-7 flex justify-center items-center w-full">
                   <NavLink to="/github">Github profile analysis</NavLink>
                 </li>
-                <li className="transition-all duration-100 ease-in-out  hover:bg-black border-gray-700 border hover:text-yellow-500 hover:text-shadow cursor-pointer font-bold text-[15px] hover:font-extrabold hover:text-[16px] h-7 flex justify-center items-center w-full">
+                <li className="transition-all duration-100 ease-in-out  hover:bg-black border-gray-700 border hover:text-yellow-500 hover:text-shadow cursor-pointer font-bold text-[10px] hover:font-extrabold hover:text-[16px] h-7 flex justify-center items-center w-full">
                   <NavLink to="/combinedAnalysis">Combined analysis</NavLink>
                 </li>
               </ul>
@@ -147,7 +161,7 @@ const Home = () => {
         </div>
 
         <div className="w-full lg:w-1/4 2xl:w-1/2 overflow-hidden h-120 bg-blue-950 rounded-2xl">
-          <div className="about text-yellow-600 w-full  h-fit p-4 rounded-4xl flex flex-col animate-[up_40s_linear_infinite] hover:[animation-play-state:paused]">
+          <div className="about text-yellow-600 w-full  h-fit p-4 rounded-4xl flex flex-col animate-[up_40s_linear_infinite] active:[animation-play-state:paused] hover:[animation-play-state:paused]">
             <div className="flex flex-col gap-10 text-white">
               <section className="flex flex-col gap-4">
                 <h1 className="text-4xl font-extrabold text-yellow-400">
