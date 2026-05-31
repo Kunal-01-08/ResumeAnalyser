@@ -124,8 +124,6 @@ def login(email:str=Form(...),password:str=Form(...),db:Session=Depends(get_db))
             "token_type":"bearer"
         }
         
-
-        return{"message":"User added successfully, you can login now..."}
     except HTTPException as e:
         raise e
     except Exception as e:
