@@ -13,7 +13,7 @@ from models.combinedAnalysisSchema import CombinedResponseSchema
 from services.services import chunkDocument
 from services.authservices import hash_password, verify_password, create_access_token, get_current_user
 from langchain_classic.vectorstores import Chroma
-from langchain_classic.embeddings import HuggingFaceEmbeddings
+# from langchain_classic.embeddings import HuggingFaceEmbeddings
 from database.database import engine, Base, get_db
 from models.dbmodels import User
 from sqlalchemy.orm import Session
@@ -41,20 +41,20 @@ app.add_middleware(
 
 print("A. endpoints.py loaded")
 
-embeddings=None
-def getembeddings():
-    global embeddings
+# embeddings=None
+# def getembeddings():
+#     global embeddings
 
-    if embeddings is None:
-        print("B. loading embeddings")
+#     if embeddings is None:
+#         print("B. loading embeddings")
 
-        embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
-        )
+#         embeddings = HuggingFaceEmbeddings(
+#             model_name="sentence-transformers/all-MiniLM-L6-v2"
+#         )
 
-        print("C. embeddings loaded")
+#         print("C. embeddings loaded")
 
-    return embeddings
+#     return embeddings
 async def extract_resume(file: UploadFile):
     content = await file.read()
 
@@ -334,199 +334,199 @@ async def githubAnalysis(githubUrl:str=Form(...), user= Depends(get_current_user
                 detail=str(e)
             )
     
-@app.post("/combined/analysis", response_model=CombinedResponseSchema)
-async def combinedAnalysis(file:UploadFile=File(...), githubUrl:str=Form(...), user= Depends(get_current_user)):
-        try:
-            global embeddings
+# @app.post("/combined/analysis", response_model=CombinedResponseSchema)
+# async def combinedAnalysis(file:UploadFile=File(...), githubUrl:str=Form(...), user= Depends(get_current_user)):
+#         try:
+#             global embeddings
              
-            if file.content_type != "application/pdf":
-                raise HTTPException(
-                    status_code=415,
-                    detail="Only pdf files are allowed"
-                )
-            resume=await extract_resume(file)
-            if not resume:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Empty file uploaded"
-                )
-            resume_doc=chunkDocument(resume,source="resume")
-            username = githubUrl.rstrip("/").split("/")[-1].split("?")[0]
-            url = f"https://api.github.com/users/{username}/repos"
-            user_url = f"https://api.github.com/users/{username}"
+#             if file.content_type != "application/pdf":
+#                 raise HTTPException(
+#                     status_code=415,
+#                     detail="Only pdf files are allowed"
+#                 )
+#             resume=await extract_resume(file)
+#             if not resume:
+#                 raise HTTPException(
+#                     status_code=400,
+#                     detail="Empty file uploaded"
+#                 )
+#             resume_doc=chunkDocument(resume,source="resume")
+#             username = githubUrl.rstrip("/").split("/")[-1].split("?")[0]
+#             url = f"https://api.github.com/users/{username}/repos"
+#             user_url = f"https://api.github.com/users/{username}"
 
-            user_response = requests.get(user_url)
+#             user_response = requests.get(user_url)
 
-            if user_response.status_code != 200:
-                raise HTTPException(
-                status_code=user_response.status_code,
-                detail=user_response.json()["message"]
-                )
+#             if user_response.status_code != 200:
+#                 raise HTTPException(
+#                 status_code=user_response.status_code,
+#                 detail=user_response.json()["message"]
+#                 )
 
-            user_data = user_response.json()
-            response_api = requests.get(url)
+#             user_data = user_response.json()
+#             response_api = requests.get(url)
 
-            if response_api.status_code != 200:
-                raise HTTPException(
-                    status_code=response_api.status_code,
-                    detail=response_api.json()["message"]
-                )
+#             if response_api.status_code != 200:
+#                 raise HTTPException(
+#                     status_code=response_api.status_code,
+#                     detail=response_api.json()["message"]
+#                 )
 
-            repos = response_api.json()
-            repos = [repo for repo in repos if not repo["fork"]]
-            repos.sort(
-            key=lambda x: x["stargazers_count"],
-            reverse=True
-            )
-            repos_summary=[]
-            github_doc=[]
-            for repo in repos[:10]:
-                readme_url = f"https://api.github.com/repos/{username}/{repo['name']}/readme"
-                readme_response = requests.get(readme_url)
-                readme_content = ""
+#             repos = response_api.json()
+#             repos = [repo for repo in repos if not repo["fork"]]
+#             repos.sort(
+#             key=lambda x: x["stargazers_count"],
+#             reverse=True
+#             )
+#             repos_summary=[]
+#             github_doc=[]
+#             for repo in repos[:10]:
+#                 readme_url = f"https://api.github.com/repos/{username}/{repo['name']}/readme"
+#                 readme_response = requests.get(readme_url)
+#                 readme_content = ""
 
-                if readme_response.status_code == 200:
+#                 if readme_response.status_code == 200:
 
-                    readme_json = readme_response.json()
+#                     readme_json = readme_response.json()
 
-                    encoded_content = readme_json["content"]
+#                     encoded_content = readme_json["content"]
 
-                    readme_content = base64.b64decode(
-                        encoded_content
-                    ).decode("utf-8")
+#                     readme_content = base64.b64decode(
+#                         encoded_content
+#                     ).decode("utf-8")
               
-                summary = f"""
-                Repository: {repo["name"]}
-                Description: {repo["description"] or "No description provided"}
-                Primary Language: {repo["language"] or "Not specified"}
-                Stars: {repo["stargazers_count"]}
-                """
+#                 summary = f"""
+#                 Repository: {repo["name"]}
+#                 Description: {repo["description"] or "No description provided"}
+#                 Primary Language: {repo["language"] or "Not specified"}
+#                 Stars: {repo["stargazers_count"]}
+#                 """
 
-                repos_summary.append(summary)
+#                 repos_summary.append(summary)
 
-                expanded_summary = f"""
-Repository: {repo["name"]}
+#                 expanded_summary = f"""
+# Repository: {repo["name"]}
 
-Description:
-{repo["description"] or "No description provided"}
+# Description:
+# {repo["description"] or "No description provided"}
 
-Primary Language:
-{repo["language"] or "Not specified"}
+# Primary Language:
+# {repo["language"] or "Not specified"}
 
-Stars:
-{repo["stargazers_count"]}
+# Stars:
+# {repo["stargazers_count"]}
 
-README:
-{readme_content[:3000]}
-"""
-                github_doc.extend(chunkDocument(expanded_summary,source="github",name=repo["name"]))
-            repos_summary = "\n\n".join(repos_summary)
+# README:
+# {readme_content[:3000]}
+# """
+#                 github_doc.extend(chunkDocument(expanded_summary,source="github",name=repo["name"]))
+#             repos_summary = "\n\n".join(repos_summary)
 
-            combined_context=f"""
-***Resume***
-{resume}
-***Github***
-{repos_summary}
+#             combined_context=f"""
+# ***Resume***
+# {resume}
+# ***Github***
+# {repos_summary}
 
-"""
+# """
             
-            if(embeddings is None):
-                getembeddings()
-            documents = resume_doc + github_doc
+#             if(embeddings is None):
+#                 getembeddings()
+#             documents = resume_doc + github_doc
 
-            print("D: creating chroma")
-            try:
+#             print("D: creating chroma")
+#             try:
 
-                old_store = Chroma(
-        collection_name=f"user_{user.id}",
-        persist_directory="./chroma_db",
-        embedding_function=embeddings
-    )
+#                 old_store = Chroma(
+#         collection_name=f"user_{user.id}",
+#         persist_directory="./chroma_db",
+#         embedding_function=embeddings
+#     )
 
-                old_store.delete_collection()
+#                 old_store.delete_collection()
 
-            except:
-                pass
+#             except:
+#                 pass
 
 
-            vectorstore = Chroma(
-    collection_name=f"user_{user.id}",
-    persist_directory="./chroma_db",
-    embedding_function=embeddings
-)
+#             vectorstore = Chroma(
+#     collection_name=f"user_{user.id}",
+#     persist_directory="./chroma_db",
+#     embedding_function=embeddings
+# )
 
-            vectorstore.add_documents(documents)
+#             vectorstore.add_documents(documents)
             
             
-            try:
-                llm_response = await chain6.ainvoke({
-                         "combined_context": combined_context
-            })
-            except:
-                llm_response = await chain6.ainvoke({
-                         "combined_context": combined_context
-            })
+#             try:
+#                 llm_response = await chain6.ainvoke({
+#                          "combined_context": combined_context
+#             })
+#             except:
+#                 llm_response = await chain6.ainvoke({
+#                          "combined_context": combined_context
+#             })
 
-            return {
-    "profile": {
-        "name": user_data["name"],
-        "avatar": user_data["avatar_url"],
-        "followers": user_data["followers"],
-        "publicRepos": user_data["public_repos"],
-        "bio": user_data["bio"]
-    },
-    "analysis": llm_response
-}
+#             return {
+#     "profile": {
+#         "name": user_data["name"],
+#         "avatar": user_data["avatar_url"],
+#         "followers": user_data["followers"],
+#         "publicRepos": user_data["public_repos"],
+#         "bio": user_data["bio"]
+#     },
+#     "analysis": llm_response
+# }
 
-        except HTTPException as e:
-            raise e
+#         except HTTPException as e:
+#             raise e
 
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=str(e)
-            )
+#         except Exception as e:
+#             raise HTTPException(
+#                 status_code=500,
+#                 detail=str(e)
+#             )
 
-@app.post("/combined/query", response_model=ResponseSchema)
-async def combinedQueryResponse(query:str=Form(...), user= Depends(get_current_user)):
-    try:
-        vectorstore = Chroma(
-        collection_name=f"user_{user.id}",
-        persist_directory="./chroma_db",
-        embedding_function=embeddings
-    )
+# @app.post("/combined/query", response_model=ResponseSchema)
+# async def combinedQueryResponse(query:str=Form(...), user= Depends(get_current_user)):
+#     try:
+#         vectorstore = Chroma(
+#         collection_name=f"user_{user.id}",
+#         persist_directory="./chroma_db",
+#         embedding_function=embeddings
+#     )
 
-        retriever = vectorstore.as_retriever()
-        docs = retriever.invoke(query)
-        if not docs:
-            raise HTTPException(
-            status_code=400,
-            detail="No analysis data available"
-            )
-        context = "\n\n".join([
-    f"""
-SOURCE: {doc.metadata.get("source")}
+#         retriever = vectorstore.as_retriever()
+#         docs = retriever.invoke(query)
+#         if not docs:
+#             raise HTTPException(
+#             status_code=400,
+#             detail="No analysis data available"
+#             )
+#         context = "\n\n".join([
+#     f"""
+# SOURCE: {doc.metadata.get("source")}
 
-NAME: {doc.metadata.get("name")}
+# NAME: {doc.metadata.get("name")}
 
-CONTENT:
-{doc.page_content}
-"""
-    for doc in docs
-])
-        try:
-            response=await chain2.ainvoke({"prompt":query,"context":context})
-        except:
-            response=await chain2.ainvoke({"prompt":query,"context":context})
+# CONTENT:
+# {doc.page_content}
+# """
+#     for doc in docs
+# ])
+#         try:
+#             response=await chain2.ainvoke({"prompt":query,"context":context})
+#         except:
+#             response=await chain2.ainvoke({"prompt":query,"context":context})
 
-        return response
+#         return response
         
-    except HTTPException as e:
-        raise e
+#     except HTTPException as e:
+#         raise e
 
-    except Exception as e:
-        raise HTTPException(
-                status_code=500,
-                detail=str(e)
-            )
+#     except Exception as e:
+#         raise HTTPException(
+#                 status_code=500,
+#                 detail=str(e)
+#             )
     
