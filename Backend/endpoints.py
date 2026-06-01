@@ -24,6 +24,9 @@ load_dotenv()
 
 Base.metadata.create_all(bind=engine)
 
+
+print("DB exists:", os.path.exists("users.db"))
+
 frontend_urls = [
     "http://localhost:5173",
     "http://localhost:3000",
@@ -284,19 +287,19 @@ async def githubAnalysis(githubUrl:str=Form(...), user= Depends(get_current_user
         user_response = requests.get(user_url)
 
         if user_response.status_code != 200:
-            raise HTTPException(
-            status_code=404,
-            detail="Invalid GitHub profile"
-            )
+                raise HTTPException(
+                status_code=user_response.status_code,
+                detail=user_response.json()["message"]
+                )
 
         user_data = user_response.json()
         response_api = requests.get(url)
 
         if response_api.status_code != 200:
-            raise HTTPException(
-                status_code=404,
-                detail="Invalid github profile"
-            )
+                raise HTTPException(
+                    status_code=response_api.status_code,
+                    detail=response_api.json()["message"]
+                )
 
         repos = response_api.json()
         repos = [repo for repo in repos if not repo["fork"]]
