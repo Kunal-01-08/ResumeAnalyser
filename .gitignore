@@ -8,5 +8,6 @@ Backend/chroma_db/
 Backend/*.db
 Backend/PocForProject.ipynb
 
+
 .env
 *.env
