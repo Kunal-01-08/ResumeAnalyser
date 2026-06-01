@@ -24,7 +24,7 @@ load_dotenv()
 
 Base.metadata.create_all(bind=engine)
 
-
+githubToken = os.getenv("GITHUB_TOKEN")
 print("DB exists:", os.path.exists("users.db"))
 
 frontend_urls = [
@@ -280,11 +280,15 @@ async def giveOutline(
 @app.post("/github/analyse", response_model=GithubResponseSchema)
 async def githubAnalysis(githubUrl:str=Form(...), user= Depends(get_current_user)):
     try:
+        headers = {
+    "Authorization": f"Bearer {githubToken}",
+    "Accept": "application/vnd.github+json"
+}
         username = githubUrl.rstrip("/").split("/")[-1].split("?")[0]
         url = f"https://api.github.com/users/{username}/repos"
         user_url = f"https://api.github.com/users/{username}"
 
-        user_response = requests.get(user_url)
+        user_response = requests.get(user_url,headers=headers)
 
         if user_response.status_code != 200:
                 raise HTTPException(
@@ -293,7 +297,7 @@ async def githubAnalysis(githubUrl:str=Form(...), user= Depends(get_current_user
                 )
 
         user_data = user_response.json()
-        response_api = requests.get(url)
+        response_api = requests.get(url,headers=headers)
 
         if response_api.status_code != 200:
                 raise HTTPException(
@@ -345,7 +349,10 @@ async def githubAnalysis(githubUrl:str=Form(...), user= Depends(get_current_user
 async def combinedAnalysis(file:UploadFile=File(...), githubUrl:str=Form(...), user= Depends(get_current_user)):
         try:
             global embeddings
-             
+            headers = {
+    "Authorization": f"Bearer {githubToken}",
+    "Accept": "application/vnd.github+json"
+}
             if file.content_type != "application/pdf":
                 raise HTTPException(
                     status_code=415,
@@ -362,7 +369,7 @@ async def combinedAnalysis(file:UploadFile=File(...), githubUrl:str=Form(...), u
             url = f"https://api.github.com/users/{username}/repos"
             user_url = f"https://api.github.com/users/{username}"
 
-            user_response = requests.get(user_url)
+            user_response = requests.get(user_url,headers=headers)
 
             if user_response.status_code != 200:
                 raise HTTPException(
@@ -371,7 +378,7 @@ async def combinedAnalysis(file:UploadFile=File(...), githubUrl:str=Form(...), u
                 )
 
             user_data = user_response.json()
-            response_api = requests.get(url)
+            response_api = requests.get(url,headers=headers)
 
             if response_api.status_code != 200:
                 raise HTTPException(
@@ -389,7 +396,7 @@ async def combinedAnalysis(file:UploadFile=File(...), githubUrl:str=Form(...), u
             github_doc=[]
             for repo in repos[:10]:
                 readme_url = f"https://api.github.com/repos/{username}/{repo['name']}/readme"
-                readme_response = requests.get(readme_url)
+                readme_response = requests.get(readme_url,headers=headers)
                 readme_content = ""
 
                 if readme_response.status_code == 200:
