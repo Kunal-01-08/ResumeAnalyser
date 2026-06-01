@@ -25,7 +25,6 @@ load_dotenv()
 Base.metadata.create_all(bind=engine)
 
 githubToken = os.getenv("GITHUB_TOKEN")
-print("DB exists:", os.path.exists("users.db"))
 
 frontend_urls = [
     "http://localhost:5173",
