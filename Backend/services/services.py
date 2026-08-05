@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 load_dotenv()
 os.environ['GROQ_API_KEY']=os.getenv("GROQ_SECRET")
 
-llm = ChatGroq(model='meta-llama/llama-4-scout-17b-16e-instruct',max_tokens=500,temperature=0.2)
+llm = ChatGroq(model = "llama-3.3-70b-versatile" ,max_tokens=500,temperature=0.2)
 parser=PydanticOutputParser(pydantic_object=ResponseSchema)
 comparison_parser=PydanticOutputParser(pydantic_object=ComparisonResponseSchema)
 outline_parser=PydanticOutputParser(pydantic_object=OutlineSchema)
