@@ -1,3 +1,7 @@
+import asyncio
+from contextlib import asynccontextmanager, suppress
+from datetime import datetime, timedelta
+
 from fastapi import FastAPI, UploadFile, File, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import HTTPException
@@ -14,8 +18,8 @@ from services.services import chunkDocument
 from services.authservices import hash_password, verify_password, create_access_token, get_current_user
 from langchain_classic.vectorstores import Chroma
 from langchain_community.embeddings import FastEmbedEmbeddings
-from database.database import engine, Base, get_db
-from models.dbmodels import User
+from database.database import engine, Base, SessionLocal, get_db
+from models.dbmodels import RagSession, User
 from sqlalchemy.orm import Session
 import base64
 import requests
@@ -23,6 +27,82 @@ import os
 load_dotenv()
 
 Base.metadata.create_all(bind=engine)
+
+CHROMA_PERSIST_DIRECTORY = os.getenv("CHROMA_PERSIST_DIRECTORY", "./chroma_db")
+
+
+def positive_integer_setting(name: str, default: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+        return value if value > 0 else default
+    except ValueError:
+        return default
+
+
+# Production defaults: expire inactive context after 30 minutes and clean it every 5 minutes.
+RAG_SESSION_TTL_SECONDS = positive_integer_setting("RAG_SESSION_TTL_SECONDS", 1800)
+RAG_CLEANUP_INTERVAL_SECONDS = positive_integer_setting("RAG_CLEANUP_INTERVAL_SECONDS", 300)
+
+
+def rag_collection_name(user_id: int) -> str:
+    """Keep one replaceable RAG collection per user."""
+    return f"user_{user_id}"
+
+
+def rag_session_expired(session: RagSession) -> bool:
+    cutoff = datetime.utcnow() - timedelta(seconds=RAG_SESSION_TTL_SECONDS)
+    return session.last_accessed_at < cutoff
+
+
+def delete_rag_collection(collection_name: str) -> None:
+    """Delete an expired/replaced collection without loading the embedding model."""
+    store = Chroma(
+        collection_name=collection_name,
+        persist_directory=CHROMA_PERSIST_DIRECTORY,
+    )
+    store.delete_collection()
+
+
+def remove_rag_session(session: RagSession, db: Session) -> None:
+    """Only remove metadata after the vector collection has been removed."""
+    delete_rag_collection(session.collection_name)
+    db.delete(session)
+    db.commit()
+
+
+def cleanup_expired_rag_sessions() -> None:
+    """Purge inactive RAG collections; failures are retained for a later retry."""
+    db = SessionLocal()
+    try:
+        sessions = db.query(RagSession).all()
+        for session in sessions:
+            if not rag_session_expired(session):
+                continue
+            try:
+                remove_rag_session(session, db)
+            except Exception as error:
+                db.rollback()
+                print(f"Unable to remove expired RAG collection {session.collection_name}: {error}")
+    finally:
+        db.close()
+
+
+async def rag_cleanup_worker() -> None:
+    while True:
+        cleanup_expired_rag_sessions()
+        await asyncio.sleep(RAG_CLEANUP_INTERVAL_SECONDS)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    cleanup_expired_rag_sessions()
+    cleanup_task = asyncio.create_task(rag_cleanup_worker())
+    try:
+        yield
+    finally:
+        cleanup_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await cleanup_task
 
 githubToken = os.getenv("GITHUB_TOKEN")
 
@@ -36,7 +116,7 @@ frontend_urls = [
     ]
 ]
 
-app=FastAPI()
+app=FastAPI(lifespan=lifespan)
 
 frontend_urls = os.getenv("FRONTEND_URLS", "").split(",")
 
@@ -345,7 +425,12 @@ async def githubAnalysis(githubUrl:str=Form(...), user= Depends(get_current_user
             )
     
 @app.post("/combined/analysis", response_model=CombinedResponseSchema)
-async def combinedAnalysis(file:UploadFile=File(...), githubUrl:str=Form(...), user= Depends(get_current_user)):
+async def combinedAnalysis(
+    file: UploadFile = File(...),
+    githubUrl: str = Form(...),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
         try:
             global embeddings
             headers = {
@@ -448,27 +533,45 @@ README:
             documents = resume_doc + github_doc
 
             print("D: creating chroma")
-            try:
+            collection_name = rag_collection_name(user.id)
+            previous_session = db.query(RagSession).filter(
+                RagSession.user_id == user.id
+            ).first()
 
-                old_store = Chroma(
-        collection_name=f"user_{user.id}",
-        persist_directory="./chroma_db",
-        embedding_function=embeddings
-    )
-
-                old_store.delete_collection()
-
-            except:
-                pass
-
+            # A new analysis deliberately replaces the user's previous context.
+            if previous_session:
+                remove_rag_session(previous_session, db)
+            else:
+                # Remove a collection created by versions deployed before RAG
+                # session metadata was introduced.
+                try:
+                    delete_rag_collection(collection_name)
+                except Exception:
+                    pass
 
             vectorstore = Chroma(
-    collection_name=f"user_{user.id}",
-    persist_directory="./chroma_db",
-    embedding_function=embeddings
-)
+                collection_name=collection_name,
+                persist_directory=CHROMA_PERSIST_DIRECTORY,
+                embedding_function=embeddings,
+            )
 
-            vectorstore.add_documents(documents)
+            try:
+                vectorstore.add_documents(documents)
+                now = datetime.utcnow()
+                db.add(RagSession(
+                    user_id=user.id,
+                    collection_name=collection_name,
+                    created_at=now,
+                    last_accessed_at=now,
+                ))
+                db.commit()
+            except Exception:
+                db.rollback()
+                try:
+                    delete_rag_collection(collection_name)
+                except Exception as cleanup_error:
+                    print(f"Unable to remove incomplete RAG collection {collection_name}: {cleanup_error}")
+                raise
             
             
             try:
@@ -501,13 +604,43 @@ README:
             )
 
 @app.post("/combined/query", response_model=ResponseSchema)
-async def combinedQueryResponse(query:str=Form(...), user= Depends(get_current_user)):
+async def combinedQueryResponse(
+    query: str = Form(...),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     try:
+        if not query.strip():
+            raise HTTPException(status_code=400, detail="Query can not be empty")
+
+        session = db.query(RagSession).filter(
+            RagSession.user_id == user.id
+        ).first()
+        if not session:
+            raise HTTPException(
+                status_code=404,
+                detail="No active analysis found. Upload a resume and GitHub profile first.",
+            )
+
+        if rag_session_expired(session):
+            remove_rag_session(session, db)
+            raise HTTPException(
+                status_code=410,
+                detail="Your analysis expired after inactivity. Upload a resume and GitHub profile again.",
+            )
+
+        # This is a sliding expiry: active conversations keep their context.
+        session.last_accessed_at = datetime.utcnow()
+        db.commit()
+
+        if embeddings is None:
+            getembeddings()
+
         vectorstore = Chroma(
-        collection_name=f"user_{user.id}",
-        persist_directory="./chroma_db",
-        embedding_function=embeddings
-    )
+            collection_name=session.collection_name,
+            persist_directory=CHROMA_PERSIST_DIRECTORY,
+            embedding_function=embeddings,
+        )
 
         retriever = vectorstore.as_retriever()
         docs = retriever.invoke(query)
