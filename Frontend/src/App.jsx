@@ -21,6 +21,8 @@ function App() {
         <Route path="/github" element={<Github/>}/>
         <Route path="/combinedAnalysis" element={<CombinedAnalysis/>}/>
         <Route path="/authentication" element={<Authentication/>}/>
+        <Route path="/reset-password" element={<Authentication/>}/>
+        <Route path="/verify-email" element={<Authentication/>}/>
 
 
       </Routes>

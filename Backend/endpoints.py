@@ -15,11 +15,25 @@ from models.resumeOutlineSchema import OutlineSchema
 from models.githubAnalysisSchema import GithubResponseSchema
 from models.combinedAnalysisSchema import CombinedResponseSchema
 from services.services import chunkDocument
-from services.authservices import hash_password, verify_password, create_access_token, get_current_user
+from services.authservices import (
+    create_access_token,
+    create_password_reset_token,
+    get_current_user,
+    hash_password,
+    hash_password_reset_token,
+    normalize_and_validate_email,
+    validate_password,
+    verify_password,
+)
+from services.emailservices import (
+    email_is_configured,
+    send_email_verification_email,
+    send_password_reset_email,
+)
 from langchain_classic.vectorstores import Chroma
 from langchain_community.embeddings import FastEmbedEmbeddings
 from database.database import engine, Base, SessionLocal, get_db
-from models.dbmodels import RagSession, User
+from models.dbmodels import AccountToken, RagSession, User
 from sqlalchemy.orm import Session
 import base64
 import requests
@@ -42,6 +56,41 @@ def positive_integer_setting(name: str, default: int) -> int:
 # Production defaults: expire inactive context after 30 minutes and clean it every 5 minutes.
 RAG_SESSION_TTL_SECONDS = positive_integer_setting("RAG_SESSION_TTL_SECONDS", 1800)
 RAG_CLEANUP_INTERVAL_SECONDS = positive_integer_setting("RAG_CLEANUP_INTERVAL_SECONDS", 300)
+# Expired password-reset and verification tokens do not need to be retained.
+TOKEN_CLEANUP_INTERVAL_SECONDS = positive_integer_setting(
+    "TOKEN_CLEANUP_INTERVAL_SECONDS", 86400
+)
+PASSWORD_RESET_TOKEN_TTL_MINUTES = positive_integer_setting(
+    "PASSWORD_RESET_TOKEN_TTL_MINUTES", 15
+)
+PASSWORD_RESET_URL = os.getenv(
+    "PASSWORD_RESET_URL", "http://localhost:5173/reset-password"
+)
+EMAIL_VERIFICATION_TOKEN_TTL_MINUTES = positive_integer_setting(
+    "EMAIL_VERIFICATION_TOKEN_TTL_MINUTES", 15
+)
+EMAIL_VERIFICATION_URL = os.getenv(
+    "EMAIL_VERIFICATION_URL", "http://localhost:5173/verify-email"
+)
+
+
+def create_email_verification_token(user_id: int, db: Session) -> str:
+    """Replace outstanding verification links and return a new raw token."""
+    raw_token = create_password_reset_token()
+    db.query(AccountToken).filter(
+        AccountToken.user_id == user_id,
+        AccountToken.purpose == "email_verification",
+        AccountToken.used_at.is_(None),
+    ).delete(synchronize_session=False)
+    db.add(AccountToken(
+        user_id=user_id,
+        token_hash=hash_password_reset_token(raw_token),
+        purpose="email_verification",
+        expires_at=datetime.utcnow() + timedelta(
+            minutes=EMAIL_VERIFICATION_TOKEN_TTL_MINUTES
+        ),
+    ))
+    return raw_token
 
 
 def rag_collection_name(user_id: int) -> str:
@@ -87,38 +136,67 @@ def cleanup_expired_rag_sessions() -> None:
         db.close()
 
 
+def cleanup_expired_account_tokens() -> None:
+    """Remove expired password-reset and email-verification tokens."""
+    db = SessionLocal()
+    try:
+        deleted_count = db.query(AccountToken).filter(
+            AccountToken.expires_at < datetime.utcnow()
+        ).delete(synchronize_session=False)
+        db.commit()
+        if deleted_count:
+            print(f"Removed {deleted_count} expired account token(s).")
+    except Exception as error:
+        db.rollback()
+        print(f"Unable to remove expired account tokens: {error}")
+    finally:
+        db.close()
+
+
 async def rag_cleanup_worker() -> None:
     while True:
         cleanup_expired_rag_sessions()
         await asyncio.sleep(RAG_CLEANUP_INTERVAL_SECONDS)
 
 
+async def token_cleanup_worker() -> None:
+    while True:
+        await asyncio.sleep(TOKEN_CLEANUP_INTERVAL_SECONDS)
+        cleanup_expired_account_tokens()
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     cleanup_expired_rag_sessions()
-    cleanup_task = asyncio.create_task(rag_cleanup_worker())
+    cleanup_expired_account_tokens()
+    rag_cleanup_task = asyncio.create_task(rag_cleanup_worker())
+    token_cleanup_task = asyncio.create_task(token_cleanup_worker())
     try:
         yield
     finally:
-        cleanup_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await cleanup_task
+        for task in (rag_cleanup_task, token_cleanup_task):
+            task.cancel()
+        for task in (rag_cleanup_task, token_cleanup_task):
+            with suppress(asyncio.CancelledError):
+                await task
 
 githubToken = os.getenv("GITHUB_TOKEN")
 
-frontend_urls = [
-    "http://localhost:5173",
-    "http://localhost:3000",
-    *[
-        url.strip()
-        for url in os.getenv("FRONTEND_URLS", "").split(",")
-        if url.strip()
-    ]
-]
-
 app=FastAPI(lifespan=lifespan)
 
-frontend_urls = os.getenv("FRONTEND_URLS", "").split(",")
+# CORS origins must not include a trailing slash. Keep local development
+# origins and add any deployed frontend URLs configured in the environment.
+frontend_urls = list(
+    dict.fromkeys(
+        origin.strip().rstrip("/")
+        for origin in [
+            "http://localhost:5173",
+            "http://localhost:3000",
+            *os.getenv("FRONTEND_URLS", "").split(","),
+        ]
+        if origin.strip()
+    )
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -156,6 +234,13 @@ async def extract_resume(file: UploadFile):
 @app.post("/signup")
 async def signup(email:str=Form(...),password:str=Form(...),db: Session = Depends(get_db)):
     try:
+        email = normalize_and_validate_email(email)
+        validate_password(password)
+        if not email_is_configured():
+            raise HTTPException(
+                status_code=503,
+                detail="Account verification email is temporarily unavailable.",
+            )
         existing_user=db.query(User).filter(User.email==email).first()  
         if(existing_user):
             raise HTTPException(
@@ -166,14 +251,29 @@ async def signup(email:str=Form(...),password:str=Form(...),db: Session = Depend
 
         hshpswd=hash_password(password)
         new_user = User(
-        email=email,
-        hashed_password=hshpswd
+            email=email,
+            hashed_password=hshpswd,
+            email_verified=False,
         )
         db.add(new_user)
-        db.commit()
-        db.refresh(new_user)
+        db.flush()
 
-        return{"message":"User added successfully, you can login now..."}
+        raw_token = create_email_verification_token(new_user.id, db)
+
+        try:
+            verification_url = f"{EMAIL_VERIFICATION_URL}?token={raw_token}"
+            send_email_verification_email(new_user.email, verification_url)
+            db.commit()
+        except Exception as error:
+            db.rollback()
+            raise HTTPException(
+                status_code=503,
+                detail="Account verification email is temporarily unavailable.",
+            ) from error
+
+        return {"message":"Account created. Verify your email before logging in."}
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -185,6 +285,7 @@ async def signup(email:str=Form(...),password:str=Form(...),db: Session = Depend
 @app.post("/login")
 def login(email:str=Form(...),password:str=Form(...),db:Session=Depends(get_db)):
     try:
+        email = normalize_and_validate_email(email)
         existing_user=db.query(User).filter(User.email==email).first()  
         if(not existing_user):
             raise HTTPException(
@@ -199,6 +300,12 @@ def login(email:str=Form(...),password:str=Form(...),db:Session=Depends(get_db))
             status_code=401,
             detail="Incorrect password"
         )
+
+        if not existing_user.email_verified:
+            raise HTTPException(
+                status_code=403,
+                detail="Verify your email before logging in.",
+            )
         
         token=create_access_token({"sub":existing_user.email})
 
@@ -208,6 +315,8 @@ def login(email:str=Form(...),password:str=Form(...),db:Session=Depends(get_db))
             "token_type":"bearer"
         }
         
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -215,6 +324,176 @@ def login(email:str=Form(...),password:str=Form(...),db:Session=Depends(get_db))
                 status_code=500,
                 detail=str(e)
             )
+
+
+@app.post("/verify-email")
+def verify_email(token: str = Form(...), db: Session = Depends(get_db)):
+    verification_token = db.query(AccountToken).filter(
+        AccountToken.token_hash == hash_password_reset_token(token),
+        AccountToken.purpose == "email_verification",
+        AccountToken.used_at.is_(None),
+        AccountToken.expires_at > datetime.utcnow(),
+    ).first()
+
+    if not verification_token:
+        raise HTTPException(
+            status_code=400,
+            detail="This email verification link is invalid or has expired.",
+        )
+
+    user = db.query(User).filter(User.id == verification_token.user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=400,
+            detail="This email verification link is invalid or has expired.",
+        )
+
+    try:
+        user.email_verified = True
+        verification_token.used_at = datetime.utcnow()
+        db.query(AccountToken).filter(
+            AccountToken.user_id == user.id,
+            AccountToken.purpose == "email_verification",
+            AccountToken.id != verification_token.id,
+        ).delete(synchronize_session=False)
+        db.commit()
+    except Exception as error:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Unable to verify email.") from error
+
+    return {"message": "Email verified. You can now log in."}
+
+
+@app.post("/resend-verification")
+def resend_verification(email: str = Form(...), db: Session = Depends(get_db)):
+    try:
+        email = normalize_and_validate_email(email)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+    if not email_is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Account verification email is temporarily unavailable.",
+        )
+
+    user = db.query(User).filter(User.email == email).first()
+    if user and not user.email_verified:
+        try:
+            raw_token = create_email_verification_token(user.id, db)
+            verification_url = f"{EMAIL_VERIFICATION_URL}?token={raw_token}"
+            send_email_verification_email(user.email, verification_url)
+            db.commit()
+        except Exception as error:
+            db.rollback()
+            raise HTTPException(
+                status_code=503,
+                detail="Account verification email is temporarily unavailable.",
+            ) from error
+
+    return {
+        "message": "If an unverified account exists for this email, a verification link has been sent."
+    }
+
+@app.post("/forgot-password")
+def forgot_password(email: str = Form(...), db: Session = Depends(get_db)):
+    """Issue a one-time reset link without exposing whether an email exists."""
+    try:
+        email = normalize_and_validate_email(email)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+    if not email_is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Password reset email is temporarily unavailable.",
+        )
+
+    user = db.query(User).filter(User.email == email).first()
+    if user:
+        raw_token = create_password_reset_token()
+        reset_token = AccountToken(
+            user_id=user.id,
+            token_hash=hash_password_reset_token(raw_token),
+            purpose="password_reset",
+            expires_at=datetime.utcnow() + timedelta(
+                minutes=PASSWORD_RESET_TOKEN_TTL_MINUTES
+            ),
+        )
+
+        try:
+            # Only the newest reset link remains valid for this account.
+            db.query(AccountToken).filter(
+                AccountToken.user_id == user.id,
+                AccountToken.purpose == "password_reset",
+                AccountToken.used_at.is_(None),
+            ).delete(synchronize_session=False)
+            db.add(reset_token)
+            db.commit()
+            send_password_reset_email(user.email, f"{PASSWORD_RESET_URL}?token={raw_token}")
+        except Exception:
+            db.rollback()
+            db.query(AccountToken).filter(
+                AccountToken.token_hash == reset_token.token_hash,
+                AccountToken.purpose == "password_reset",
+            ).delete(synchronize_session=False)
+            db.commit()
+            raise HTTPException(
+                status_code=503,
+                detail="Password reset email is temporarily unavailable.",
+            )
+
+    return {
+        "message": "If an account exists for this email, a password reset link has been sent."
+    }
+
+
+@app.post("/reset-password")
+def reset_password(
+    token: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    try:
+        validate_password(password)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    reset_token = db.query(AccountToken).filter(
+        AccountToken.token_hash == hash_password_reset_token(token),
+        AccountToken.purpose == "password_reset",
+        AccountToken.used_at.is_(None),
+        AccountToken.expires_at > datetime.utcnow(),
+    ).first()
+
+    if not reset_token:
+        raise HTTPException(
+            status_code=400,
+            detail="This password reset link is invalid or has expired.",
+        )
+
+    user = db.query(User).filter(User.id == reset_token.user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=400,
+            detail="This password reset link is invalid or has expired.",
+        )
+
+    try:
+        user.hashed_password = hash_password(password)
+        reset_token.used_at = datetime.utcnow()
+        db.query(AccountToken).filter(
+            AccountToken.user_id == user.id,
+            AccountToken.purpose == "password_reset",
+            AccountToken.id != reset_token.id,
+        ).delete(synchronize_session=False)
+        db.commit()
+    except Exception as error:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Unable to reset password.") from error
+
+    return {"message": "Password reset successfully. You can now log in."}
+
 
 @app.post("/resume/analyse")
 async def resumeAnalysis(file:UploadFile=File(...), user= Depends(get_current_user)):
