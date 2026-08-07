@@ -1,11 +1,12 @@
 import React from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useEffect } from "react";
 
 const Home = () => {
   const [options, setoptions] = useState(0);
   const [loggedin, setloggedin] = useState(0)
+  const navigate = useNavigate();
 
   useEffect(() => {
    
@@ -14,6 +15,12 @@ const Home = () => {
   
     
   }, [])
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    setloggedin(0);
+    navigate("/authentication");
+  };
   
 
 
@@ -33,7 +40,18 @@ const Home = () => {
         >
           Signup/ Login
         </NavLink>}
-        {loggedin===1 && <div className="py-1 px-2 sm:px-3 bg-green-600 rounded-full flex justify-center items-center transition-all duration-50 hover:scale-101  text-xs">Logged in</div> }
+        {loggedin===1 && (
+          <div className="flex items-center gap-2 text-xs">
+            <div className="py-1 px-2 sm:px-3 bg-green-600 rounded-full">Logged in</div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="py-1 px-2 sm:px-3 bg-red-700 rounded-full hover:bg-red-600 transition-all"
+            >
+              Logout
+            </button>
+          </div>
+        )}
       </div>
       <div className="flex flex-col gap-6 lg:flex-row items-center">
         <div className="flex flex-col gap-4 justify-between w-full lg:w-3/4 2xl:w-1/2">
