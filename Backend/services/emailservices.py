@@ -4,18 +4,52 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 
+import requests
+
 
 logger = logging.getLogger(__name__)
 
 
 def email_is_configured() -> bool:
-    return bool(os.getenv("SMTP_HOST") and os.getenv("SMTP_FROM"))
+    has_sender = bool(os.getenv("SMTP_FROM"))
+    has_brevo_api = bool(os.getenv("BREVO_API_KEY"))
+    has_smtp = bool(os.getenv("SMTP_HOST"))
+    return has_sender and (has_brevo_api or has_smtp)
+
+
+def send_with_brevo_api(message: EmailMessage, api_key: str) -> None:
+    """Send through Brevo's HTTPS API, avoiding blocked SMTP ports on Render."""
+    response = requests.post(
+        "https://api.brevo.com/v3/smtp/email",
+        headers={
+            "accept": "application/json",
+            "api-key": api_key,
+            "content-type": "application/json",
+        },
+        json={
+            "sender": {"email": os.environ["SMTP_FROM"]},
+            "to": [{"email": str(message["To"])}],
+            "subject": str(message["Subject"]),
+            "textContent": message.get_body(preferencelist=("plain",)).get_content(),
+        },
+        timeout=15,
+    )
+    response.raise_for_status()
 
 
 def send_email(message: EmailMessage) -> None:
     """Deliver a prepared email through the configured SMTP provider."""
     if not email_is_configured():
         raise RuntimeError("Email delivery is not configured")
+
+    brevo_api_key = os.getenv("BREVO_API_KEY")
+    if brevo_api_key:
+        try:
+            send_with_brevo_api(message, brevo_api_key)
+            return
+        except requests.RequestException as error:
+            logger.exception("Brevo API email delivery failed: %s", error)
+            raise
 
     host = os.environ["SMTP_HOST"]
     port = int(os.getenv("SMTP_PORT", "587"))
