@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timedelta
 
@@ -39,6 +40,8 @@ import base64
 import requests
 import os
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 Base.metadata.create_all(bind=engine)
 
@@ -271,6 +274,7 @@ async def signup(email:str=Form(...),password:str=Form(...),db: Session = Depend
             db.commit()
         except Exception as error:
             db.rollback()
+            logger.exception("Verification email delivery failed for a new signup.")
             raise HTTPException(
                 status_code=503,
                 detail="Account verification email is temporarily unavailable.",

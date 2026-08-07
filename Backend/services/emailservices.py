@@ -1,6 +1,11 @@
+import logging
 import os
 import smtplib
+import ssl
 from email.message import EmailMessage
+
+
+logger = logging.getLogger(__name__)
 
 
 def email_is_configured() -> bool:
@@ -17,19 +22,35 @@ def send_email(message: EmailMessage) -> None:
     username = os.getenv("SMTP_USER")
     password = os.getenv("SMTP_PASSWORD")
     use_ssl = os.getenv("SMTP_USE_SSL", "false").lower() == "true"
+    tls_context = ssl.create_default_context()
 
-    if use_ssl:
-        with smtplib.SMTP_SSL(host, port, timeout=15) as server:
+    try:
+        if use_ssl:
+            with smtplib.SMTP_SSL(
+                host, port, timeout=15, context=tls_context
+            ) as server:
+                server.ehlo()
+                if username and password:
+                    server.login(username, password)
+                server.send_message(message)
+            return
+
+        with smtplib.SMTP(host, port, timeout=15) as server:
+            server.ehlo()
+            server.starttls(context=tls_context)
+            server.ehlo()
             if username and password:
                 server.login(username, password)
             server.send_message(message)
-        return
-
-    with smtplib.SMTP(host, port, timeout=15) as server:
-        server.starttls()
-        if username and password:
-            server.login(username, password)
-        server.send_message(message)
+    except (OSError, smtplib.SMTPException, ValueError) as error:
+        logger.exception(
+            "SMTP delivery failed (host=%s, port=%s, ssl=%s): %s",
+            host,
+            port,
+            use_ssl,
+            error,
+        )
+        raise
 
 
 def send_password_reset_email(recipient: str, reset_url: str) -> None:
