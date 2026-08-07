@@ -208,6 +208,11 @@ app.add_middleware(
 print("CORS ALLOWED ORIGINS:", frontend_urls)
 print("A. endpoints.py loaded")
 
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
 embeddings=None
 def getembeddings():
     global embeddings

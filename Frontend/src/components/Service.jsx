@@ -2,7 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-const backend = import.meta.env.VITE_BACKEND_URL;
+import { apiUrl, readApiResponse } from "../api";
 const Service = () => {
   const navigate = useNavigate()
   const [filename, setfilename] = useState("No file chosen");
@@ -27,7 +27,7 @@ const Service = () => {
     const token = localStorage.getItem("token");
     const formData = new FormData(e.target);
 
-    const res = await fetch(`${backend}/resume/analyse`, {
+    const res = await fetch(apiUrl("/resume/analyse"), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -42,7 +42,7 @@ const Service = () => {
       return;
     }
 
-    const resJson = await res.json();
+    const resJson = await readApiResponse(res);
 
     if (!res.ok) {
       seterror(resJson.detail || "An unexpected error occurred.");
@@ -57,9 +57,7 @@ const Service = () => {
   } catch (err) {
     console.error(err);
 
-    seterror(
-      "Unable to connect to the server. Please try again in a few moments."
-    );
+    seterror(err.message || "Unable to connect to the server. Please try again in a few moments.");
   }
 };
 
@@ -75,7 +73,7 @@ const Service = () => {
     else {
         let formData = new FormData(e.target);
         formData.append("resume", resume);
-        let result = await fetch(`${backend}/resume/query`, {
+        let result = await fetch(apiUrl("/resume/query"), {
           method: "POST",headers:{
       Authorization:`Bearer ${token}`
    },
@@ -86,7 +84,7 @@ if(result.status==401) {
       navigate("/authentication")
       return
     }
-        let resJson = await result.json();
+        let resJson = await readApiResponse(result);
         if (!result.ok) seterror(resJson.detail);
         else {
           setqueryResponse({ preamble: resJson.preamble, res: resJson.res });
@@ -98,9 +96,7 @@ if(result.status==401) {
     }catch (err) {
     console.error(err);
 
-    seterror(
-      "Unable to connect to the server. Please try again in a few moments."
-    );
+    seterror(err.message || "Unable to connect to the server. Please try again in a few moments.");
   }
   
   };
